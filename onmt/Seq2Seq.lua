@@ -101,9 +101,11 @@ function Seq2Seq.load(args, models, dicts, isReplica)
 
   parent.__init(self, args)
   onmt.utils.Table.merge(self.args, onmt.utils.ExtendedCmdLine.getModuleOpts(args, options))
-
-  self.models.gatingNetwork = onmt.Factory.loadGatingNetwork(models.encoder, isReplica)
-
+  self.gate = args.gate
+  if args.gate then
+    self.models.gatingNetwork = onmt.Factory.loadGatingNetwork(models.gatingNetwork, isReplica)
+    self.gatingType = args.gating_type
+  end
   self.models.encoder = onmt.Factory.loadEncoder(models.encoder, isReplica)
   self.models.decoder = onmt.Factory.loadDecoder(models.decoder, isReplica)
   self.criterion = onmt.ParallelClassNLLCriterion(onmt.Factory.getOutputSizes(dicts.tgt))
@@ -122,6 +124,9 @@ function Seq2Seq.dataType()
 end
 
 function Seq2Seq:enableProfiling()
+  if self.gate then
+    _G.profiler.addHook(self.models.gatingNetwork, 'gatingNetwork')
+  end
   _G.profiler.addHook(self.models.encoder, 'encoder')
   _G.profiler.addHook(self.models.decoder, 'decoder')
   _G.profiler.addHook(self.models.decoder.modules[2], 'generator')
