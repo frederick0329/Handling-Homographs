@@ -57,6 +57,8 @@ Parameters:
   * `tgtFeatures` - 2D table of target batch features (opt)
 --]]
 function Batch:__init(src, srcFeatures, tgt, tgtFeatures)
+  self.gateTensor = nil
+
   src = src or {}
   srcFeatures = srcFeatures or {}
   tgtFeatures = tgtFeatures or {}
@@ -144,6 +146,11 @@ function Batch:__init(src, srcFeatures, tgt, tgtFeatures)
   end
 end
 
+function Batch:setGateTensor(gate)
+  self.gateTensor = gate
+  return self
+end
+
 --[[ Set source input directly,
 
 Parameters:
@@ -215,7 +222,12 @@ function Batch:getSourceInput(t)
     addInputFeatures(inputs, self.sourceInputFeatures, t)
   end
 
-  return inputs
+  if self.gateTensor ~= nil then
+    return {inputs, self.gateTensor[{{}, t, {}}]}
+  else
+    return inputs
+  end
+
 end
 
 --[[ Get target input batch at timestep `t`. --]]

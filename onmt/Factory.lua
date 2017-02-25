@@ -30,6 +30,74 @@ local function resolveEmbSizes(opt, dicts, wordSizes)
   return wordEmbSize, featEmbSizes
 end
 
+local function buildGatedInputNetwork(opt, dicts, wordSizes, pretrainedWords, fixWords)
+  local wordEmbSize, featEmbSizes = resolveEmbSizes(opt, dicts, wordSizes)
+
+  local wordEmbedding = onmt.WordEmbedding.new(dicts.words:size(), -- vocab size
+                                               wordEmbSize,
+                                               pretrainedWords,
+                                               fixWords)
+  -- network for inputs
+  local inputs
+  local inputSize = wordEmbSize
+
+  local multiInputs = #dicts.features > 0
+
+  if multiInputs then
+    inputs = nn.ParallelTable()
+      :add(wordEmbedding)
+  else
+    inputs = wordEmbedding
+  end
+
+  -- Sequence with features.
+  if #dicts.features > 0 then
+    local vocabSizes = {}
+    for i = 1, #dicts.features do
+      table.insert(vocabSizes, dicts.features[i]:size())
+    end
+
+    local featEmbedding = onmt.FeaturesEmbedding.new(vocabSizes, featEmbSizes, opt.feat_merge)
+    inputs:add(featEmbedding)
+    inputSize = inputSize + featEmbedding.outputSize
+  end
+
+  local wordNetwork
+  
+  if multiInputs then
+    wordNetwork = nn.Sequential()
+      :add(inputs)
+      :add(nn.JoinTable(2, 2))
+  else
+    wordNetwork = inputs
+  end
+
+
+
+  local inputNetwork
+  if opt.gate == true then
+    local gateNetwork = nn.Sequential()
+        :add(nn.Linear(opt.gating_rnn_size, inputSize))
+        :add(nn.SoftMax())
+
+    gate = nn.ParallelTable()
+      :add(wordNetwork)
+      :add(gateNetwork)
+
+    inputNetwork = nn.Sequential()
+        :add(gate)
+        --:add(onmt.PrintIdentity())
+        :add(nn.CMulTable())
+        --:add(onmt.PrintIdentity())
+  else
+    inputNetwork = wordNetwork
+  end
+
+  inputNetwork.inputSize = inputSize
+
+  return inputNetwork
+end
+
 local function buildInputNetwork(opt, dicts, wordSizes, pretrainedWords, fixWords)
   local wordEmbSize, featEmbSizes = resolveEmbSizes(opt, dicts, wordSizes)
 
@@ -77,6 +145,7 @@ local function buildInputNetwork(opt, dicts, wordSizes, pretrainedWords, fixWord
   return inputNetwork
 end
 
+
 function Factory.getOutputSizes(dicts)
   local outputSizes = { dicts.words:size() }
   for i = 1, #dicts.features do
@@ -119,11 +188,87 @@ function Factory.buildEncoder(opt, inputNetwork)
 end
 
 function Factory.buildWordEncoder(opt, dicts)
-  local inputNetwork = buildInputNetwork(opt, dicts,
+  local inputNetwork
+  if opt.gate == true then
+    inputNetwork = buildGatedInputNetwork(opt, dicts,
                                          opt.src_word_vec_size or opt.word_vec_size,
                                          opt.pre_word_vecs_enc, opt.fix_word_vecs_enc)
-
+  else
+    inputNetwork = buildInputNetwork(opt, dicts,
+                                         opt.src_word_vec_size or opt.word_vec_size,
+                                         opt.pre_word_vecs_enc, opt.fix_word_vecs_enc)
+  end
   return Factory.buildEncoder(opt, inputNetwork)
+end
+
+
+function buildContextBiEncoder(opt, inputNetwork)
+  local contextBiEncoder
+
+  local RNN = onmt.LSTM
+  if opt.gating_rnn_type == 'GRU' then
+    RNN = onmt.GRU
+  end
+
+  local rnnSize = opt.gating_rnn_size
+    if opt.gating_brnn_merge == 'concat' then
+      if opt.gating_rnn_size % 2 ~= 0 then
+        error('in concat mode, rnn_size must be divisible by 2')
+      end
+      rnnSize = rnnSize / 2
+    elseif opt.gating_brnn_merge == 'sum' then
+      rnnSize = rnnSize
+    else
+      error('invalid merge action ' .. opt.gating_brnn_merge)
+    end
+
+    local rnn = RNN.new(opt.gating_layers, inputNetwork.inputSize, rnnSize, opt.gating_dropout, opt.gating_residual)
+
+    contextBiEncoder = onmt.BiEncoder.new(inputNetwork, rnn, opt.gating_brnn_merge)
+    return contextBiEncoder
+end
+
+function buildLeaveOneOut(opt, inputNetwork)
+  local encoder
+
+  local RNN = onmt.LSTM
+  if opt.gating_rnn_type == 'GRU' then
+    RNN = onmt.GRU
+  end
+
+  local rnn = RNN.new(opt.gating_layers, inputNetwork.inputSize, opt.gating_rnn_size, opt.gating_dropout, opt.gating_residual)
+  encoder = onmt.Encoder.new(inputNetwork, rnn)
+  return encoder
+end
+
+
+function Factory.buildGatingNetwork(opt, dicts)
+  local inputNetwork = buildInputNetwork(opt, dicts,
+                      opt.gating_src_word_vec_size or opt.gating_word_vec_size,
+                      opt.gating_pre_word_vecs_enc, opt.gating_fix_word_vecs_enc)
+  if opt.gating_type == 'leave_one_out' then
+    return buildLeaveOneOut(opt, inputNetwork)
+  elseif opt.gating_type == 'contextBiEncoder' then
+    return buildContextBiEncoder(opt, inputNetwork)
+  end
+end
+
+function Factory.loadGatingNetwork(pretrained, clone)
+  print (pretrained.name)
+  if clone then
+    pretrained = onmt.utils.Tensor.deepClone(pretrained)
+  end
+  if pretrained.name == 'BiEncoder' then
+    return onmt.BiEncoder.load(pretrained)
+  elseif pretrained.name == 'Encoder' then
+    return onmt.Encoder.load(pretrained)
+  end
+  --[[
+  if opt.gating_type == 'leave_one_out' then
+    return buildLeaveOneOut(opt, inputNetwork)
+  elseif opt.gating_type == 'contextBiEncoder' then
+    return buildContextBiEncoder(opt, inputNetwork)
+  --]]
 end
 
 function Factory.loadEncoder(pretrained, clone)

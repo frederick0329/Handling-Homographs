@@ -18,7 +18,10 @@ local options = {
   {'-pre_filter_factor', 1, [[Optional, set this only if filter is being used. Before
                             applying filters, hypotheses with top `beamSize * preFilterFactor`
                             scores will be considered. If the returned hypotheses voilate filters,
-                            then set this to a larger value to consider more.]]}
+                            then set this to a larger value to consider more.]]},
+  {'-gate', true, [[Using Gating Network.]]},
+  {'-gating_type', 'contextBiEncoder', [[Gating Network]],
+                    {enum={'contextBiEncoder', 'leave_one_out'}}}
 }
 
 function Translator.declareOpts(cmd)
@@ -34,6 +37,7 @@ function Translator:__init(args)
   self.checkpoint = torch.load(self.opt.model)
 
   self.models = {}
+
   self.models.encoder = onmt.Factory.loadEncoder(self.checkpoint.models.encoder)
   self.models.decoder = onmt.Factory.loadDecoder(self.checkpoint.models.decoder)
 
@@ -42,6 +46,13 @@ function Translator:__init(args)
 
   onmt.utils.Cuda.convert(self.models.encoder)
   onmt.utils.Cuda.convert(self.models.decoder)
+
+  if self.opt.gate == true then
+    self.models.gatingNetwork = onmt.Factory.loadGatingNetwork(self.checkpoint.models.gatingNetwork)
+    self.models.gatingNetwork:evaluate()
+    onmt.utils.Cuda.convert(self.models.gatingNetwork)
+  end
+
 
   self.dicts = self.checkpoint.dicts
 
@@ -139,7 +150,6 @@ end
 
 function Translator:buildTargetFeatures(predFeats)
   local numFeatures = #predFeats[1]
-
   if numFeatures == 0 then
     return {}
   end
@@ -159,6 +169,31 @@ function Translator:buildTargetFeatures(predFeats)
 end
 
 function Translator:translateBatch(batch)
+  local rnnSize = nil
+  local gatingEncStates = nil
+  local gatingContext = nil
+  if self.opt.gate then
+    self.models.gatingNetwork:maskPadding()
+    rnnSize = self.models.gatingNetwork.args.rnnSize
+    -- gatingContext: batch x rho x dim tensor
+    if self.opt.gating_type == 'contextBiEncoder' then
+      gatingEncStates, gatingContext = self.models.gatingNetwork:forward(batch)
+      --print(gatingContext:size())
+    elseif self.opt.gating_type == 'leave_one_out' then
+      gatingContext = {}
+      for t = 1, batch.sourceLength do
+        local gateInputBatch = onmt.utils.Tensor.deepClone(batch)
+        gateInputBatch.sourceInput[t]:fill(onmt.Constants.DOL)
+        local finalStates, context = self.models.gatingNetwork:forward(gateInputBatch)
+        table.insert(gatingContext, finalStates[#finalStates]) -- gatingContext then becomes rho x batch x dim -> need to transpose later
+      end
+      gatingContext = torch.cat(gatingContext, 1):resize(batch.sourceLength, batch.size, self.models.gatingNetwork.args.rnnSize)
+      gatingContext = gatingContext:transpose(1,2) -- swapping dim1 with dim2 -> batch x rho x dim
+    end
+    batch:setGateTensor(gatingContext)
+    --batch:setGateTensor(torch.Tensor(batch.size, batch.sourceLength, self.models.gatingNetwork.args.rnnSize):fill(1):cuda())
+    -- print(gatingContext)
+  end
   self.models.encoder:maskPadding()
   self.models.decoder:maskPadding()
 

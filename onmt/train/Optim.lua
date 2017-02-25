@@ -54,7 +54,7 @@ end
 local Optim = torch.class('Optim')
 
 local options = {
-  {'-max_batch_size',     64   , [[Maximum batch size]],
+  {'-max_batch_size',     128   , [[Maximum batch size]],
                                  {valid=onmt.utils.ExtendedCmdLine.isUInt()}},
   {'-optim',              'sgd', [[Optimization method.]],
                                  {enum={'sgd', 'adagrad', 'adadelta', 'adam'}}},

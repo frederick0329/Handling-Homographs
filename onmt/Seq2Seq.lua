@@ -2,6 +2,7 @@
 local Seq2Seq, parent = torch.class('Seq2Seq', 'Model')
 
 local options = {
+  -- main network
   {'-layers', 2,           [[Number of layers in the RNN encoder/decoder]],
                      {valid=onmt.utils.ExtendedCmdLine.isUInt()}},
   {'-rnn_size', 500, [[Size of RNN hidden states]],
@@ -34,7 +35,46 @@ local options = {
                          {valid=onmt.utils.ExtendedCmdLine.fileNullOrExists}},
   {'-fix_word_vecs_enc', false, [[Fix word embeddings on the encoder side]]},
   {'-fix_word_vecs_dec', false, [[Fix word embeddings on the decoder side]]},
-  {'-dropout', 0.3, [[Dropout probability. Dropout is applied between vertical LSTM stacks.]]}
+  {'-dropout', 0.3, [[Dropout probability. Dropout is applied between vertical LSTM stacks.]]},
+  {'-gate', false, [[Use the gating mechanism]]},
+
+  -- gating network
+  {'-gating_layers', 1,           [[Number of layers in the RNN encoder/decoder]],
+                     {valid=onmt.utils.ExtendedCmdLine.isUInt()}},
+  {'-gating_rnn_size', 500, [[Size of RNN hidden states]],
+                     {valid=onmt.utils.ExtendedCmdLine.isUInt()}},
+  {'-gating_rnn_type', 'LSTM', [[Type of RNN cell]],
+                     {enum={'LSTM','GRU'}}},
+  {'-gating_word_vec_size', 0, [[Common word embedding size. If set, this overrides -src_word_vec_size and -tgt_word_vec_size.]],
+                     {valid=onmt.utils.ExtendedCmdLine.isUInt()}},
+  {'-gating_src_word_vec_size', '500', [[Comma-separated list of source embedding sizes: word[,feat1,feat2,...].]]},
+  {'-gating_tgt_word_vec_size', '500', [[Comma-separated list of target embedding sizes: word[,feat1,feat2,...].]]},
+  {'-gating_feat_merge', 'concat', [[Merge action for the features embeddings]],
+                     {enum={'concat','sum'}}},
+  {'-gating_feat_vec_exponent', 0.7, [[When features embedding sizes are not set and using -feat_merge concat, their dimension
+                                will be set to N^exponent where N is the number of values the feature takes.]]},
+  {'-gating_feat_vec_size', 20, [[When features embedding sizes are not set and using -feat_merge sum, this is the common embedding size of the features]],
+                     {valid=onmt.utils.ExtendedCmdLine.isUInt()}},
+  {'-gating_input_feed', 1, [[Feed the context vector at each time step as additional input (via concatenation with the word embeddings) to the decoder.]],
+                     {enum={0,1}}},
+  {'-gating_residual', false, [[Add residual connections between RNN layers.]]},
+  {'-gating_brnn', true, [[Use a bidirectional encoder]]},
+  {'-gating_brnn_merge', 'sum', [[Merge action for the bidirectional hidden states]],
+                     {enum={'concat','sum'}}},
+  {'-gating_pre_word_vecs_enc', '', [[If a valid path is specified, then this will load
+                                     pretrained word embeddings on the encoder side.
+                                     See README for specific formatting instructions.]],
+                         {valid=onmt.utils.ExtendedCmdLine.fileNullOrExists}},
+  {'-gating_pre_word_vecs_dec', '', [[If a valid path is specified, then this will load
+                                       pretrained word embeddings on the decoder side.
+                                       See README for specific formatting instructions.]],
+                         {valid=onmt.utils.ExtendedCmdLine.fileNullOrExists}},
+  {'-gating_fix_word_vecs_enc', false, [[Fix word embeddings on the encoder side]]},
+  {'-gating_fix_word_vecs_dec', false, [[Fix word embeddings on the decoder side]]},
+  {'-gating_dropout', 0.3, [[Dropout probability. Dropout is applied between vertical LSTM stacks.]]},
+  {'-gating_type', 'contextBiEncoder', [[Gating Network]],
+                    {enum={'contextBiEncoder', 'leave_one_out'}}}
+
 }
 
 function Seq2Seq.declareOpts(cmd)
@@ -44,6 +84,12 @@ end
 function Seq2Seq:__init(args, dicts, verbose)
   parent.__init(self, args)
   onmt.utils.Table.merge(self.args, onmt.utils.ExtendedCmdLine.getModuleOpts(args, options))
+
+  self.gate = args.gate
+  if self.gate then
+    self.models.gatingNetwork = onmt.Factory.buildGatingNetwork(args, dicts.src, verbose)
+    self.gatingType = args.gating_type
+  end
 
   self.models.encoder = onmt.Factory.buildWordEncoder(args, dicts.src, verbose)
   self.models.decoder = onmt.Factory.buildWordDecoder(args, dicts.tgt, verbose)
@@ -55,6 +101,8 @@ function Seq2Seq.load(args, models, dicts, isReplica)
 
   parent.__init(self, args)
   onmt.utils.Table.merge(self.args, onmt.utils.ExtendedCmdLine.getModuleOpts(args, options))
+
+  self.models.gatingNetwork = onmt.Factory.loadGatingNetwork(models.encoder, isReplica)
 
   self.models.encoder = onmt.Factory.loadEncoder(models.encoder, isReplica)
   self.models.decoder = onmt.Factory.loadDecoder(models.decoder, isReplica)
@@ -85,22 +133,103 @@ function Seq2Seq:getOutput(batch)
 end
 
 function Seq2Seq:forwardComputeLoss(batch)
+  local gatingEncStates = nil
+  local gatingContext = nil
+  if self.gate then
+    -- gatingContext: batch x rho x dim tensor
+    if self.gatingType == 'contextBiEncoder' then
+      gatingEncStates, gatingContext = self.models.gatingNetwork:forward(batch)
+    elseif self.gatingType == 'leave_one_out' then
+      gatingContext = {}
+      for t = 1, batch.sourceLength do
+        local gateInputBatch = onmt.utils.Tensor.deepClone(batch)
+        gateInputBatch.sourceInput[t]:fill(onmt.Constants.DOL)
+        local finalStates, context = self.models.gatingNetwork:forward(gateInputBatch)
+        table.insert(gatingContext, finalStates[#finalStates]) -- gatingContext then becomes rho x batch x dim -> need to transpose later
+      end
+      gatingContext = torch.cat(gatingContext, 1):resize(batch.sourceLength, batch.size, self.models.gatingNetwork.args.rnnSize)
+      gatingContext = gatingContext:transpose(1,2) -- swapping dim1 with dim2 -> batch x rho x dim
+    end
+    batch:setGateTensor(gatingContext)
+  end
+
   local encoderStates, context = self.models.encoder:forward(batch)
   return self.models.decoder:computeLoss(batch, encoderStates, context, self.criterion)
 end
 
 function Seq2Seq:trainNetwork(batch, dryRun)
+  local rnnSize = nil
+  local gatingEncStates = nil
+  local gatingContext = nil
+  if self.gate then
+    rnnSize = self.models.gatingNetwork.args.rnnSize
+    -- gatingContext: batch x rho x dim tensor
+    if self.gatingType == 'contextBiEncoder' then
+      gatingEncStates, gatingContext = self.models.gatingNetwork:forward(batch)
+      --print(gatingContext:size())
+    elseif self.gatingType == 'leave_one_out' then
+      gatingContext = {}
+      for t = 1, batch.sourceLength do
+        local gateInputBatch = onmt.utils.Tensor.deepClone(batch)
+        gateInputBatch.sourceInput[t]:fill(onmt.Constants.DOL)
+        local finalStates, context = self.models.gatingNetwork:forward(gateInputBatch)
+        table.insert(gatingContext, finalStates[#finalStates]) -- gatingContext then becomes rho x batch x dim -> need to transpose later
+      end
+      gatingContext = torch.cat(gatingContext, 1):resize(batch.sourceLength, batch.size, self.models.gatingNetwork.args.rnnSize)
+      gatingContext = gatingContext:transpose(1,2) -- swapping dim1 with dim2 -> batch x rho x dim
+    end
+    batch:setGateTensor(gatingContext)
+  end
+
+  -- setSourceInput
+
   local encStates, context = self.models.encoder:forward(batch)
-
   local decOutputs = self.models.decoder:forward(batch, encStates, context)
-
+  --print(context:size())
   if dryRun then
     decOutputs = onmt.utils.Tensor.recursiveClone(decOutputs)
   end
 
   local encGradStatesOut, gradContext, loss = self.models.decoder:backward(batch, decOutputs, self.criterion)
-  self.models.encoder:backward(batch, encGradStatesOut, gradContext)
+  --print(gradContext:size())
+  local gradInputs = self.models.encoder:backward(batch, encGradStatesOut, gradContext)
+  if self.gate then
+    if self.gatingType == 'contextBiEncoder' then
+      --print(gradInputs[1])
+      local gradGatingContext = torch.Tensor(batch.size, batch.sourceLength, rnnSize):zero()
+      if #onmt.utils.Cuda.gpuIds > 0 then
+        gradGatingContext = gradGatingContext:cuda()
+      end
+      for t = 1, batch.sourceLength do
+        gradGatingContext[{{}, t, {}}] = gradInputs[t][2]
+      end
+      self.models.gatingNetwork:backward(batch, nil, gradGatingContext)
 
+    elseif self.gatingType == 'leave_one_out' then
+      local gradStates = {}
+      local gradContext
+      for t = batch.sourceLength, 1, -1 do
+        local gateInputBatch = onmt.utils.Tensor.deepClone(batch)
+        gateInputBatch.sourceInput[t]:fill(onmt.Constants.DOL)
+        
+        local gradStates = torch.Tensor()
+        gradStates = onmt.utils.Tensor.initTensorTable(self.models.gatingNetwork.args.numEffectiveLayers,
+                                                       gradStates, { batch.size, rnnSize })
+
+        local gradGatingContext = torch.Tensor(batch.size, batch.sourceLength, rnnSize):zero()
+        gradStates[#gradStates] = gradInputs[t][2]
+
+        if #onmt.utils.Cuda.gpuIds > 0 then
+          for s = 1, #gradStates do
+            gradStates[s] = gradStates[s]:cuda()
+            gradGatingContext = gradGatingContext:cuda()
+          end
+        end
+
+        self.models.gatingNetwork:backward(gateInputBatch, gradStates, gradGatingContext)
+      end
+    end
+  end
   return loss
 end
 

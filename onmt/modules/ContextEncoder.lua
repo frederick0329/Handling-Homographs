@@ -12,7 +12,7 @@
 
 Inherits from [onmt.Sequencer](onmt+modules+Sequencer).
 --]]
-local Encoder, parent = torch.class('onmt.Encoder', 'onmt.Sequencer')
+local ContextEncoder, parent = torch.class('onmt.ContextEncoder', 'onmt.Sequencer')
 
 --[[ Construct an encoder layer.
 
@@ -21,7 +21,7 @@ Parameters:
   * `inputNetwork` - input module.
   * `rnn` - recurrent module.
 ]]
-function Encoder:__init(inputNetwork, rnn)
+function ContextEncoder:__init(inputNetwork, rnn)
   self.rnn = rnn
   self.inputNet = inputNetwork
 
@@ -35,7 +35,7 @@ function Encoder:__init(inputNetwork, rnn)
 end
 
 --[[ Return a new Encoder using the serialized data `pretrained`. ]]
-function Encoder.load(pretrained)
+function ContextEncoder.load(pretrained)
   local self = torch.factory('onmt.Encoder')()
 
   self.args = pretrained.args
@@ -47,7 +47,7 @@ function Encoder.load(pretrained)
 end
 
 --[[ Return data to serialize. ]]
-function Encoder:serialize()
+function ContextEncoder:serialize()
   return {
     name = 'Encoder',
     modules = self.modules,
@@ -55,7 +55,7 @@ function Encoder:serialize()
   }
 end
 
-function Encoder:resetPreallocation()
+function ContextEncoder:resetPreallocation()
   -- Prototype for preallocated hidden and cell states.
   self.stateProto = torch.Tensor()
 
@@ -66,7 +66,7 @@ function Encoder:resetPreallocation()
   self.contextProto = torch.Tensor()
 end
 
-function Encoder:maskPadding()
+function ContextEncoder:maskPadding()
   self.maskPad = true
 end
 
@@ -80,7 +80,7 @@ Returns: An nn-graph mapping
   Where $$c^l$$ and $$h^l$$ are the hidden and cell states at each layer,
   $$x_t$$ is a sparse word to lookup.
 --]]
-function Encoder:_buildModel()
+function ContextEncoder:_buildModel()
   local inputs = {}
   local states = {}
 
@@ -115,7 +115,7 @@ Returns:
   1. - final hidden states
   2. - context matrix H
 --]]
-function Encoder:forward(batch)
+function ContextEncoder:forward(batch)
 
   -- TODO: Change `batch` to `input`.
 
@@ -196,7 +196,7 @@ end
 
   Returns: `gradInputs` of input network.
 --]]
-function Encoder:backward(batch, gradStatesOutput, gradContextOutput)
+function ContextEncoder:backward(batch, gradStatesOutput, gradContextOutput)
   -- TODO: change this to (input, gradOutput) as in nngraph.
   local outputSize = self.args.rnnSize
   if self.gradOutputsProto == nil then
@@ -220,6 +220,7 @@ function Encoder:backward(batch, gradStatesOutput, gradContextOutput)
     gradStatesInput[#gradStatesInput]:add(gradContextOutput[{{}, t}])
 
     local gradInput = self:net(t):backward(self.inputs[t], gradStatesInput)
+
     -- Prepare next encoder output gradients.
     for i = 1, #gradStatesInput do
       gradStatesInput[i]:copy(gradInput[i])

@@ -12,7 +12,8 @@ end
 
 function Vocabulary.make(filename, validFunc)
   local wordVocab = onmt.utils.Dict.new({onmt.Constants.PAD_WORD, onmt.Constants.UNK_WORD,
-                                         onmt.Constants.BOS_WORD, onmt.Constants.EOS_WORD})
+                                         onmt.Constants.BOS_WORD, onmt.Constants.EOS_WORD,
+                                         onmt.Constants.Dollar_Sign})
   local featuresVocabs = {}
 
   local reader = onmt.utils.FileReader.new(filename)
@@ -39,7 +40,8 @@ function Vocabulary.make(filename, validFunc)
       if #featuresVocabs == 0 and numFeatures > 0 then
         for j = 1, numFeatures do
           featuresVocabs[j] = onmt.utils.Dict.new({onmt.Constants.PAD_WORD, onmt.Constants.UNK_WORD,
-                                                   onmt.Constants.BOS_WORD, onmt.Constants.EOS_WORD})
+                                                   onmt.Constants.BOS_WORD, onmt.Constants.EOS_WORD,
+                                                   onmt.Constatns.Dollar_Sign})
         end
       else
         assert(#featuresVocabs == numFeatures,
