@@ -88,6 +88,7 @@ local function buildGatedInputNetwork(opt, dicts, wordSizes, pretrainedWords, fi
         :add(gate)
         --:add(onmt.PrintIdentity())
         :add(nn.CMulTable())
+	:add(nn.MulConstant(inputSize))
         --:add(onmt.PrintIdentity())
   else
     inputNetwork = wordNetwork
