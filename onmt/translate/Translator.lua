@@ -19,7 +19,7 @@ local options = {
                             applying filters, hypotheses with top `beamSize * preFilterFactor`
                             scores will be considered. If the returned hypotheses voilate filters,
                             then set this to a larger value to consider more.]]},
-  {'-gate', true, [[Using Gating Network.]]},
+  {'-gate', false, [[Using Gating Network.]]},
   {'-gating_type', 'contextBiEncoder', [[Gating Network]],
                     {enum={'contextBiEncoder', 'leave_one_out'}}}
 }
@@ -37,6 +37,7 @@ function Translator:__init(args)
   self.checkpoint = torch.load(self.opt.model)
 
   self.models = {}
+  
 
   self.models.encoder = onmt.Factory.loadEncoder(self.checkpoint.models.encoder)
   self.models.decoder = onmt.Factory.loadDecoder(self.checkpoint.models.decoder)
