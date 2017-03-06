@@ -147,16 +147,10 @@ function Seq2Seq:forwardComputeLoss(batch)
     elseif self.gatingType == 'leave_one_out' then
       gatingContext = {}
       for t = 1, batch.sourceLength do
-        --[[
         local gateInputBatch = onmt.utils.Tensor.deepClone(batch)
         gateInputBatch.sourceInput[t]:fill(onmt.Constants.DOL)
-        --]]
-        local oriChar = batch.sourceInput[t]
-        batch.sourceInput[t]:fill(onmt.Constants.DOL)
-        -- local finalStates, context = self.models.gatingNetwork:forward(gateInputBatch)
-        local finalStates, context = self.models.gatingNetwork:forward(batch)
+        local finalStates, context = self.models.gatingNetwork:forward(gateInputBatch)
         table.insert(gatingContext, finalStates[#finalStates]) -- gatingContext then becomes rho x batch x dim -> need to transpose later
-        batch.sourceInput[t] = oriChar
       end
       gatingContext = torch.cat(gatingContext, 1):resize(batch.sourceLength, batch.size, self.models.gatingNetwork.args.rnnSize)
       gatingContext = gatingContext:transpose(1,2) -- swapping dim1 with dim2 -> batch x rho x dim
@@ -169,7 +163,6 @@ function Seq2Seq:forwardComputeLoss(batch)
 end
 
 function Seq2Seq:trainNetwork(batch, dryRun)
-
   local rnnSize = nil
   local gatingEncStates = nil
   local gatingContext = nil
@@ -190,6 +183,7 @@ function Seq2Seq:trainNetwork(batch, dryRun)
       print (torch.sum(tmpP[1]))
     end
     --]]
+
     rnnSize = self.models.gatingNetwork.args.rnnSize
     -- gatingContext: batch x rho x dim tensor
     if self.gatingType == 'contextBiEncoder' then
@@ -198,16 +192,10 @@ function Seq2Seq:trainNetwork(batch, dryRun)
     elseif self.gatingType == 'leave_one_out' then
       gatingContext = {}
       for t = 1, batch.sourceLength do
-        --[[
         local gateInputBatch = onmt.utils.Tensor.deepClone(batch)
         gateInputBatch.sourceInput[t]:fill(onmt.Constants.DOL)
-        --]]
-        local oriChar = batch.sourceInput[t]
-        batch.sourceInput[t]:fill(onmt.Constants.DOL)
-        -- local finalStates, context = self.models.gatingNetwork:forward(gateInputBatch)
-        local finalStates, context = self.models.gatingNetwork:forward(batch)
+        local finalStates, context = self.models.gatingNetwork:forward(gateInputBatch)
         table.insert(gatingContext, finalStates[#finalStates]) -- gatingContext then becomes rho x batch x dim -> need to transpose later
-        batch.sourceInput[t] = oriChar
       end
       gatingContext = torch.cat(gatingContext, 1):resize(batch.sourceLength, batch.size, self.models.gatingNetwork.args.rnnSize)
       gatingContext = gatingContext:transpose(1,2) -- swapping dim1 with dim2 -> batch x rho x dim
@@ -243,12 +231,9 @@ function Seq2Seq:trainNetwork(batch, dryRun)
       local gradStates = {}
       local gradContext
       for t = batch.sourceLength, 1, -1 do
-        --[[
         local gateInputBatch = onmt.utils.Tensor.deepClone(batch)
         gateInputBatch.sourceInput[t]:fill(onmt.Constants.DOL)
-        --]]
-        local oriChar = batch.sourceInput[t]
-        batch.sourceInput[t]:fill(onmt.Constants.DOL)
+        
         local gradStates = torch.Tensor()
         gradStates = onmt.utils.Tensor.initTensorTable(self.models.gatingNetwork.args.numEffectiveLayers,
                                                        gradStates, { batch.size, rnnSize })
@@ -263,9 +248,7 @@ function Seq2Seq:trainNetwork(batch, dryRun)
           end
         end
 
-        -- self.models.gatingNetwork:backward(gateInputBatch, gradStates, gradGatingContext)
-        self.models.gatingNetwork:backward(batch, gradStates, gradGatingContext)
-        batch.sourceInput[t] = oriChar
+        self.models.gatingNetwork:backward(gateInputBatch, gradStates, gradGatingContext)
       end
     end
   end
