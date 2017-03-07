@@ -172,20 +172,23 @@ function Seq2Seq:trainNetwork(batch, dryRun)
     --[[
     print ('----------------------')
     print (torch.sum(self.models.encoder.inputNet.modules[1].modules[1].net.weight))
-    if self.models.gatingNetwork.fwd then
+    if self.models.gatingNetwork.name == 'BiEncoder' then
       print (torch.sum(self.models.gatingNetwork.fwd.inputNet.net.weight))
       -- print (torch.sum(self.models.gatingNetwork.bwd.inputNet.net.weight))
       local tmpF, tmpGPF = self.models.gatingNetwork.fwd:parameters()
       local tmpB, tmpGPB = self.models.gatingNetwork.bwd:parameters()
       print (torch.sum(tmpF[1]))
       print (torch.sum(tmpB[1]))
-    else
+    elseif self.models.gatingNetwork.name == 'Encoder' then
+      print (torch.sum(self.models.gatingNetwork.inputNet.net.weight))
+      local tmpP, tmpGP = self.models.gatingNetwork:parameters()
+      print (torch.sum(tmpP[1]))
+    elseif self.models.gatingNetwork.name == 'ContextConvolution' then
       print (torch.sum(self.models.gatingNetwork.inputNet.net.weight))
       local tmpP, tmpGP = self.models.gatingNetwork:parameters()
       print (torch.sum(tmpP[1]))
     end
     --]]
-
     rnnSize = self.models.gatingNetwork.args.rnnSize
     -- gatingContext: batch x rho x dim tensor
     if self.gatingType == 'contextBiEncoder' then
