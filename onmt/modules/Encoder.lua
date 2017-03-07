@@ -22,6 +22,7 @@ Parameters:
   * `rnn` - recurrent module.
 ]]
 function Encoder:__init(inputNetwork, rnn)
+  self.name = 'Encoder'
   self.rnn = rnn
   self.inputNet = inputNetwork
 
@@ -37,7 +38,7 @@ end
 --[[ Return a new Encoder using the serialized data `pretrained`. ]]
 function Encoder.load(pretrained)
   local self = torch.factory('onmt.Encoder')()
-
+  self.name = 'Encoder'
   self.args = pretrained.args
   parent.__init(self, pretrained.modules[1])
 

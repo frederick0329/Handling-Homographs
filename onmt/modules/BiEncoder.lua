@@ -44,7 +44,7 @@ Parameters:
 ]]
 function BiEncoder:__init(input, rnn, merge)
   parent.__init(self)
-
+  self.name = 'BiEncoder'
   self.fwd = onmt.Encoder.new(input, rnn)
   self.bwd = onmt.Encoder.new(input:clone('weight', 'bias', 'gradWeight', 'gradBias'), rnn:clone())
 
@@ -69,7 +69,7 @@ end
 --[[ Return a new BiEncoder using the serialized data `pretrained`. ]]
 function BiEncoder.load(pretrained)
   local self = torch.factory('onmt.BiEncoder')()
-
+  self.name = 'BiEncoder'
   parent.__init(self)
 
   self.fwd = onmt.Encoder.load(pretrained.modules[1])

@@ -8,6 +8,7 @@ Parameters:
   * `rnn` - recurrent module.
 ]]
 function ContextConvolution:__init(inputNetwork, convNetwork, inputSize)
+  self.name = 'ContextConvolution'
   self.inputNet = inputNetwork
   self.convNet = convNetwork
 
@@ -21,7 +22,7 @@ end
 --[[ Return a new Encoder using the serialized data `pretrained`. ]]
 function ContextConvolution.load(pretrained)
   local self = torch.factory('onmt.ContextConvolution')()
-
+  self.name = 'ContextConvolution'
   self.args = pretrained.args
   parent.__init(self, pretrained.modules[1])
 
