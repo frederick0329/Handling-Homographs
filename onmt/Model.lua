@@ -62,7 +62,7 @@ function Model:initParams(verbose)
     local p, gp = mod:getParameters()
 
     if key == 'gatingNetwork' and self.args.share then
-      if mod.fwd then --contextBiEncoder
+      if mod.name == 'BiEncoder' then --contextBiEncoder
         -- dirty code... 
         -- p, gp = mod.fwd.network:getParameters()
         local fwd = mod.modules[1].modules[1]
@@ -84,9 +84,12 @@ function Model:initParams(verbose)
         local bwd = mod.modules[2].modules[1]
         p, gp = nnq(bwd):descendants()[3]:val().data.module:getParameters()
         -- p, gp = mod.bwd.rnn:getParameters()
-      else -- leave_one_out
+      elseif mod.name == 'Encoder' then -- leave_one_out
         -- p, gp = mod.rnn:getParameters()
         p, gp = nnq(mod.modules[1]):descendants()[3]:val().data.module:getParameters() -- this line needs to check later
+      elseif mod.name == 'ContextConvolution' then
+        -- print (nnq(mod.modules[1]):descendants()[4]:val().data.module)
+        p, gp = nnq(mod.modules[1]):descendants()[4]:val().data.module:getParameters()
       end
     end
 
@@ -113,7 +116,7 @@ function Model:initParams(verbose)
     -- local p, gp = self.models['encoder'].inputNet.modules[1].modules[1]:parameters()
     local p, gp = nnq(self.models['encoder'].modules[1]):descendants()[13]:val().data.module.modules[1].modules[1]:parameters()
     local cloneP, cloneGP
-    if self.models.gatingNetwork.fwd then
+    if self.models.gatingNetwork.name == 'BiEncoder' then
       -- cloneP, cloneGP = self.models['gatingNetwork'].fwd.inputNet:parameters()
       local fwd = self.models['gatingNetwork'].modules[1].modules[1]
       cloneP, cloneGP = nnq(fwd):descendants()[9]:val().data.module:parameters()
@@ -128,13 +131,19 @@ function Model:initParams(verbose)
         cloneP[i]:set(p[i])
         cloneGP[i]:set(gp[i])
       end
-    else
+    elseif self.models.gatingNetwork.name == 'Encoder' then
       -- cloneP, cloneGP = self.models['gatingNetwork'].inputNet:parameters()
       cloneP, cloneGP = nnq(self.models['gatingNetwork'].modules[1]):descendants()[9]:val().data.module:parameters() -- this line needs to check later
       for i = 1, #p do
         cloneP[i]:set(p[i])
         cloneGP[i]:set(gp[i])
       end
+    elseif self.models.gatingNetwork.name == 'ContextConvolution' then
+        cloneP, cloneGP = nnq(self.models['gatingNetwork'].modules[1]):descendants()[2]:val().data.module:parameters()
+        for i = 1, #p do
+          cloneP[i]:set(p[i])
+          cloneGP[i]:set(gp[i])
+        end
     end
   end
   return params, gradParams
