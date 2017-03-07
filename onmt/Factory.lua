@@ -245,11 +245,11 @@ function buildConvNetwork(opt)
     end
     local convNet = nn.Sequential()
                 :add(conv)
-                :add(nn.Tanh())
                 :add(nn.JoinTable(1, 3))
                 --:add(onmt.PrintIdentity())
                 :add(nn.Sum(3, 3))
                 :add(nn.Transpose({2, 3}))
+                :add(nn.Tanh())
                 --:add(onmt.PrintIdentity())
                 
     return convNet
@@ -257,7 +257,7 @@ end
 
 function buildContextConvolution(opt, inputNetwork)
   local convNetwork = buildConvNetwork(opt)
-  local contextConvolution = onmt.contextConvolution.new(inputNetwork, convNetwork, opt.src_word_vec_size)
+  local contextConvolution = onmt.ContextConvolution.new(inputNetwork, convNetwork, opt.src_word_vec_size)
   return contextConvolution
 end
 
@@ -290,7 +290,6 @@ function Factory.buildGatingNetwork(opt, dicts)
 end
 
 function Factory.loadGatingNetwork(pretrained, clone)
-  print (pretrained.name)
   if clone then
     pretrained = onmt.utils.Tensor.deepClone(pretrained)
   end
