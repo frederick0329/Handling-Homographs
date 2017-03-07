@@ -245,6 +245,7 @@ function buildConvNetwork(opt)
     end
     local convNet = nn.Sequential()
                 :add(conv)
+                :add(nn.Tanh())
                 :add(nn.JoinTable(1, 3))
                 --:add(onmt.PrintIdentity())
                 :add(nn.Sum(3, 3))

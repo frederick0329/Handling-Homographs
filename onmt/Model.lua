@@ -1,4 +1,5 @@
 --[[ Generic Model class. ]]
+local nnq = require 'nnquery'
 local Model = torch.class('Model')
 
 local options = {
@@ -6,7 +7,8 @@ local options = {
                               This option impacts all options choices]],
                      {enum={'lm','seq2seq'}}},
   {'-param_init', 0.1, [[Parameters are initialized over uniform distribution with support (-param_init, param_init)]],
-                       {valid=function(v) return v >= 0 and v <= 1 end}}
+                       {valid=function(v) return v >= 0 and v <= 1 end}},
+  {'-share', false, [[share contextnet lookupTable with encoder]], {enum={true, false}}}
 }
 
 function Model.declareOpts(cmd)
@@ -59,6 +61,35 @@ function Model:initParams(verbose)
     local mod = self.models[key]
     local p, gp = mod:getParameters()
 
+    if key == 'gatingNetwork' and self.args.share then
+      if mod.fwd then --contextBiEncoder
+        -- dirty code... 
+        -- p, gp = mod.fwd.network:getParameters()
+        local fwd = mod.modules[1].modules[1]
+        p, gp = nnq(fwd):descendants()[3]:val().data.module:getParameters()
+
+        if self.args.train_from:len() == 0 then
+          p:uniform(-self.args.param_init, self.args.param_init)
+
+          mod:apply(function (m)
+            if m.postParametersInitialization then
+              m:postParametersInitialization()
+            end
+          end)
+        end
+
+        numParams = numParams + p:size(1)
+        table.insert(params, p)
+        table.insert(gradParams, gp)
+        local bwd = mod.modules[2].modules[1]
+        p, gp = nnq(bwd):descendants()[3]:val().data.module:getParameters()
+        -- p, gp = mod.bwd.rnn:getParameters()
+      else -- leave_one_out
+        -- p, gp = mod.rnn:getParameters()
+        p, gp = nnq(mod.modules[1]):descendants()[3]:val().data.module:getParameters() -- this line needs to check later
+      end
+    end
+
     if self.args.train_from:len() == 0 then
       p:uniform(-self.args.param_init, self.args.param_init)
 
@@ -77,7 +108,35 @@ function Model:initParams(verbose)
   if verbose then
     _G.logger:info(' * number of parameters: ' .. numParams)
   end
-
+  -- manually share the lookupTable
+  if self.models.gatingNetwork and self.args.share then
+    -- local p, gp = self.models['encoder'].inputNet.modules[1].modules[1]:parameters()
+    local p, gp = nnq(self.models['encoder'].modules[1]):descendants()[13]:val().data.module.modules[1].modules[1]:parameters()
+    local cloneP, cloneGP
+    if self.models.gatingNetwork.fwd then
+      -- cloneP, cloneGP = self.models['gatingNetwork'].fwd.inputNet:parameters()
+      local fwd = self.models['gatingNetwork'].modules[1].modules[1]
+      cloneP, cloneGP = nnq(fwd):descendants()[9]:val().data.module:parameters()
+      for i = 1, #p do
+        cloneP[i]:set(p[i])
+        cloneGP[i]:set(gp[i])
+      end
+      -- cloneP, cloneGP = self.models['gatingNetwork'].bwd.inputNet:parameters()
+      local bwd = self.models['gatingNetwork'].modules[2].modules[1]
+      cloneP, cloneGP = nnq(bwd):descendants()[9]:val().data.module:parameters()
+      for i = 1, #p do
+        cloneP[i]:set(p[i])
+        cloneGP[i]:set(gp[i])
+      end
+    else
+      -- cloneP, cloneGP = self.models['gatingNetwork'].inputNet:parameters()
+      cloneP, cloneGP = nnq(self.models['gatingNetwork'].modules[1]):descendants()[9]:val().data.module:parameters() -- this line needs to check later
+      for i = 1, #p do
+        cloneP[i]:set(p[i])
+        cloneGP[i]:set(gp[i])
+      end
+    end
+  end
   return params, gradParams
 end
 
