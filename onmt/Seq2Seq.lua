@@ -73,7 +73,7 @@ local options = {
   {'-gating_fix_word_vecs_dec', false, [[Fix word embeddings on the decoder side]]},
   {'-gating_dropout', 0.3, [[Dropout probability. Dropout is applied between vertical LSTM stacks.]]},
   {'-gating_type', 'contextBiEncoder', [[Gating Network]],
-                    {enum={'contextBiEncoder', 'leave_one_out'}}}
+                    {enum={'contextBiEncoder', 'leave_one_out', 'conv'}}}
 
 }
 
@@ -154,6 +154,8 @@ function Seq2Seq:forwardComputeLoss(batch)
       end
       gatingContext = torch.cat(gatingContext, 1):resize(batch.sourceLength, batch.size, self.models.gatingNetwork.args.rnnSize)
       gatingContext = gatingContext:transpose(1,2) -- swapping dim1 with dim2 -> batch x rho x dim
+    elseif self.gatingType == 'conv' then
+      gatingContext = self.models.gatingNetwork:forward(batch)
     end
     batch:setGateTensor(gatingContext)
   end
@@ -167,12 +169,13 @@ function Seq2Seq:trainNetwork(batch, dryRun)
   local gatingEncStates = nil
   local gatingContext = nil
   if self.gate then
-    rnnSize = self.models.gatingNetwork.args.rnnSize
+    --print (torch.sum(self.models.gatingNetwork.bwd.inputNet.net.weight))
     -- gatingContext: batch x rho x dim tensor
     if self.gatingType == 'contextBiEncoder' then
+      rnnSize = self.models.gatingNetwork.args.rnnSize
       gatingEncStates, gatingContext = self.models.gatingNetwork:forward(batch)
-      --print(gatingContext:size())
     elseif self.gatingType == 'leave_one_out' then
+      rnnSize = self.models.gatingNetwork.args.rnnSize
       gatingContext = {}
       for t = 1, batch.sourceLength do
         local gateInputBatch = onmt.utils.Tensor.deepClone(batch)
@@ -182,6 +185,8 @@ function Seq2Seq:trainNetwork(batch, dryRun)
       end
       gatingContext = torch.cat(gatingContext, 1):resize(batch.sourceLength, batch.size, self.models.gatingNetwork.args.rnnSize)
       gatingContext = gatingContext:transpose(1,2) -- swapping dim1 with dim2 -> batch x rho x dim
+    elseif self.gatingType == 'conv' then
+        gatingContext = self.models.gatingNetwork:forward(batch)
     end
     batch:setGateTensor(gatingContext)
   end
@@ -209,7 +214,15 @@ function Seq2Seq:trainNetwork(batch, dryRun)
         gradGatingContext[{{}, t, {}}] = gradInputs[t][2]
       end
       self.models.gatingNetwork:backward(batch, nil, gradGatingContext)
-
+    elseif self.gatingType == 'conv' then
+      local gradGatingContext = torch.Tensor(batch.size, batch.sourceLength, 600):zero()
+      if #onmt.utils.Cuda.gpuIds > 0 then
+        gradGatingContext = gradGatingContext:cuda()
+      end
+      for t = 1, batch.sourceLength do
+        gradGatingContext[{{}, t, {}}] = gradInputs[t][2]
+      end
+      self.models.gatingNetwork:backward(batch, gradGatingContext)  
     elseif self.gatingType == 'leave_one_out' then
       local gradStates = {}
       local gradContext

@@ -76,8 +76,14 @@ local function buildGatedInputNetwork(opt, dicts, wordSizes, pretrainedWords, fi
 
   local inputNetwork
   if opt.gate == true then
+    local context_size = nil
+    if opt.gating_type == 'conv' then
+      context_size = 600 
+    else
+      context_size = opt.gating_rnn_size
+    end 
     local gateNetwork = nn.Sequential()
-        :add(nn.Linear(opt.gating_rnn_size, inputSize))
+        :add(nn.Linear(context_size, inputSize))
         :add(nn.SoftMax())
 
     gate = nn.ParallelTable()
@@ -229,6 +235,31 @@ function buildContextBiEncoder(opt, inputNetwork)
     return contextBiEncoder
 end
 
+function buildConvNetwork(opt)
+    local input_size = tonumber(opt.src_word_vec_size)
+    local conv = nn.ConcatTable()
+    local kernel_sizes = {3,5,7}
+    local num_kernels = {200, 200, 200}
+    for i = 1, #kernel_sizes do
+        conv:add(nn.SpatialConvolution(1, num_kernels[i], input_size, kernel_sizes[i], 1, 1, 0, (kernel_sizes[i] - 1) / 2))
+    end
+    local convNet = nn.Sequential()
+                :add(conv)
+                :add(nn.JoinTable(1, 3))
+                --:add(onmt.PrintIdentity())
+                :add(nn.Sum(3, 3))
+                :add(nn.Transpose({2, 3}))
+                --:add(onmt.PrintIdentity())
+                
+    return convNet
+end 
+
+function buildContextConvolution(opt, inputNetwork)
+  local convNetwork = buildConvNetwork(opt)
+  local contextConvolution = onmt.contextConvolution.new(inputNetwork, convNetwork, opt.src_word_vec_size)
+  return contextConvolution
+end
+
 function buildLeaveOneOut(opt, inputNetwork)
   local encoder
 
@@ -251,7 +282,10 @@ function Factory.buildGatingNetwork(opt, dicts)
     return buildLeaveOneOut(opt, inputNetwork)
   elseif opt.gating_type == 'contextBiEncoder' then
     return buildContextBiEncoder(opt, inputNetwork)
+  elseif opt.gating_type == 'conv' then
+    return buildContextConvolution(opt, inputNetwork)
   end
+
 end
 
 function Factory.loadGatingNetwork(pretrained, clone)
@@ -263,6 +297,8 @@ function Factory.loadGatingNetwork(pretrained, clone)
     return onmt.BiEncoder.load(pretrained)
   elseif pretrained.name == 'Encoder' then
     return onmt.Encoder.load(pretrained)
+  elseif pretrained.name == 'ContextConvolution' then
+    return onmt.ContextConvolution.load(pretrained)
   end
   --[[
   if opt.gating_type == 'leave_one_out' then
