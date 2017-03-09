@@ -261,6 +261,18 @@ function buildContextConvolution(opt, inputNetwork)
   return contextConvolution
 end
 
+function buildCBowNetwork(opt)
+  local cbowNet = nn.Mean(1,2)
+  return cbowNet
+end
+
+
+function buildContextCBow(opt, inputNetwork)
+  local cbowNetwork = buildCBowNetwork(opt)
+  local contextCBow = onmt.ContextCBow.new(inputNetwork, cbowNetwork, opt.src_word_vec_size)
+  return contextCBow
+end
+
 function buildLeaveOneOut(opt, inputNetwork)
   local encoder
 
@@ -285,6 +297,8 @@ function Factory.buildGatingNetwork(opt, dicts)
     return buildContextBiEncoder(opt, inputNetwork)
   elseif opt.gating_type == 'conv' then
     return buildContextConvolution(opt, inputNetwork)
+  elseif opt.gating_type == 'cbow' then
+    return buildContextCBow(opt, inputNetwork)
   end
 
 end
@@ -375,3 +389,5 @@ function Factory.buildGenerator(rnnSize, dicts)
 end
 
 return Factory
+
+

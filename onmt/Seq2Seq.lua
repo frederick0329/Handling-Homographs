@@ -73,7 +73,7 @@ local options = {
   {'-gating_fix_word_vecs_dec', false, [[Fix word embeddings on the decoder side]]},
   {'-gating_dropout', 0.3, [[Dropout probability. Dropout is applied between vertical LSTM stacks.]]},
   {'-gating_type', 'contextBiEncoder', [[Gating Network]],
-                    {enum={'contextBiEncoder', 'leave_one_out', 'conv'}}}
+                    {enum={'contextBiEncoder', 'leave_one_out', 'conv', 'cbow'}}}
 
 }
 
@@ -156,6 +156,13 @@ function Seq2Seq:forwardComputeLoss(batch)
       gatingContext = gatingContext:transpose(1,2) -- swapping dim1 with dim2 -> batch x rho x dim
     elseif self.gatingType == 'conv' then
       gatingContext = self.models.gatingNetwork:forward(batch)
+    elseif self.gatingType == 'cbow' then
+      gatingVector = self.models.gatingNetwork:forward(batch)
+      local replica = nn.Replicate(batch.sourceLength, 2)
+      if #onmt.utils.Cuda.gpuIds > 0 then
+        replica:cuda()
+      end
+      gatingContext = replica:forward(gatingVector)
     end
     batch:setGateTensor(gatingContext)
   end
@@ -171,7 +178,11 @@ function Seq2Seq:trainNetwork(batch, dryRun)
   if self.gate then
     --[[
     print ('----------------------')
-    print (torch.sum(self.models.encoder.inputNet.modules[1].modules[1].net.weight))
+    if self.models.encoder.name == 'Encoder' then
+      print (torch.sum(self.models.encoder.inputNet.modules[1].modules[1].net.weight))
+    elseif self.models.encoder.name == 'BiEncoder' then
+      print (torch.sum(self.models.encoder.fwd.inputNet.modules[1].modules[1].net.weight))
+    end
     if self.models.gatingNetwork.name == 'BiEncoder' then
       print (torch.sum(self.models.gatingNetwork.fwd.inputNet.net.weight))
       -- print (torch.sum(self.models.gatingNetwork.bwd.inputNet.net.weight))
@@ -183,7 +194,7 @@ function Seq2Seq:trainNetwork(batch, dryRun)
       print (torch.sum(self.models.gatingNetwork.inputNet.net.weight))
       local tmpP, tmpGP = self.models.gatingNetwork:parameters()
       print (torch.sum(tmpP[1]))
-    elseif self.models.gatingNetwork.name == 'ContextConvolution' then
+    elseif self.models.gatingNetwork.name == 'ContextConvolution' or self.models.gatingNetwork.name == 'ContextCBow' then
       print (torch.sum(self.models.gatingNetwork.inputNet.net.weight))
       local tmpP, tmpGP = self.models.gatingNetwork:parameters()
       print (torch.sum(tmpP[1]))
@@ -207,6 +218,14 @@ function Seq2Seq:trainNetwork(batch, dryRun)
       gatingContext = gatingContext:transpose(1,2) -- swapping dim1 with dim2 -> batch x rho x dim
     elseif self.gatingType == 'conv' then
         gatingContext = self.models.gatingNetwork:forward(batch)
+    elseif self.gatingType == 'cbow' then
+        rnnSize = self.models.gatingNetwork.args.rnnSize
+        gatingVector = self.models.gatingNetwork:forward(batch)
+        local replica = nn.Replicate(batch.sourceLength, 2)
+        if #onmt.utils.Cuda.gpuIds > 0 then
+          replica:cuda()
+        end
+        gatingContext = replica:forward(gatingVector)
     end
     batch:setGateTensor(gatingContext)
   end
@@ -243,6 +262,16 @@ function Seq2Seq:trainNetwork(batch, dryRun)
         gradGatingContext[{{}, t, {}}] = gradInputs[t][2]
       end
       self.models.gatingNetwork:backward(batch, gradGatingContext)  
+    elseif self.gatingType == 'cbow' then
+      local gradGatingContext = torch.Tensor(batch.size, batch.sourceLength, rnnSize):zero()
+      if #onmt.utils.Cuda.gpuIds > 0 then
+        gradGatingContext = gradGatingContext:cuda()
+      end
+      for t = 1, batch.sourceLength do
+        gradGatingContext[{{}, t, {}}] = gradInputs[t][2]
+      end
+      gradGatingVector = torch.sum(gradGatingContext, 2):squeeze(2)
+      self.models.gatingNetwork:backward(batch, gradGatingVector)  
     elseif self.gatingType == 'leave_one_out' then
       local gradStates = {}
       local gradContext

@@ -8,6 +8,7 @@ require('onmt.modules.Decoder')
 require('onmt.modules.Network')
 
 require('onmt.modules.ContextConvolution')
+require('onmt.modules.ContextCBow')
 
 require('onmt.modules.GRU')
 require('onmt.modules.LSTM')
