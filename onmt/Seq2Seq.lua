@@ -203,7 +203,7 @@ function Seq2Seq:trainNetwork(batch, dryRun)
     rnnSize = self.models.gatingNetwork.args.rnnSize
     -- gatingContext: batch x rho x dim tensor
     if self.gatingType == 'contextBiEncoder' then
-      rnnSize = self.models.gatingNetwork.args.rnnSize
+      rnnSize = self.models.gatingNetwork.args.rnnSize * 2
       gatingEncStates, gatingContext = self.models.gatingNetwork:forward(batch)
     elseif self.gatingType == 'leave_one_out' then
       rnnSize = self.models.gatingNetwork.args.rnnSize
