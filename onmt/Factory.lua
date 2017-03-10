@@ -313,6 +313,8 @@ function Factory.loadGatingNetwork(pretrained, clone)
     return onmt.Encoder.load(pretrained)
   elseif pretrained.name == 'ContextConvolution' then
     return onmt.ContextConvolution.load(pretrained)
+  elseif pretrained.name == 'ContextCBow' then
+    return onmt.ContextCBow.load(pretrained)
   end
   --[[
   if opt.gating_type == 'leave_one_out' then
