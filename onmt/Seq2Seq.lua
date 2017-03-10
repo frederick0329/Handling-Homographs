@@ -23,7 +23,7 @@ local options = {
                      {enum={0,1}}},
   {'-residual', false, [[Add residual connections between RNN layers.]]},
   {'-brnn', false, [[Use a bidirectional encoder]]},
-  {'-brnn_merge', 'sum', [[Merge action for the bidirectional hidden states]],
+  {'-brnn_merge', 'concat', [[Merge action for the bidirectional hidden states]],
                      {enum={'concat','sum'}}},
   {'-pre_word_vecs_enc', '', [[If a valid path is specified, then this will load
                                      pretrained word embeddings on the encoder side.
