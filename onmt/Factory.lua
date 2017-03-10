@@ -76,6 +76,7 @@ local function buildGatedInputNetwork(opt, dicts, wordSizes, pretrainedWords, fi
 
   local inputNetwork
   if opt.gate == true then
+    print("building gating network...")
     local context_size = nil
     if opt.gating_type == 'conv' then
       context_size = 600 
@@ -96,6 +97,24 @@ local function buildGatedInputNetwork(opt, dicts, wordSizes, pretrainedWords, fi
         :add(nn.CMulTable())
 	:add(nn.MulConstant(inputSize))
         --:add(onmt.PrintIdentity())
+  elseif opt.concat == true then
+    print("building concat network...")
+    local context_size = nil
+    if opt.gating_type == 'conv' then
+      context_size = 600
+    else
+      context_size = opt.gating_rnn_size
+    end
+
+    gate = nn.ParallelTable()
+      :add(wordNetwork)
+      :add(nn.Identity())
+
+    inputNetwork = nn.Sequential()
+        :add(gate)
+        --:add(onmt.PrintIdentity())
+        :add(nn.JoinTable(2))
+        :add(nn.Linear(context_size + inputSize, inputSize))
   else
     inputNetwork = wordNetwork
   end
@@ -196,7 +215,7 @@ end
 
 function Factory.buildWordEncoder(opt, dicts)
   local inputNetwork
-  if opt.gate == true then
+  if opt.gate == true or opt.concat == true then
     inputNetwork = buildGatedInputNetwork(opt, dicts,
                                          opt.src_word_vec_size or opt.word_vec_size,
                                          opt.pre_word_vecs_enc, opt.fix_word_vecs_enc)

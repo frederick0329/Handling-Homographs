@@ -37,6 +37,7 @@ local options = {
   {'-fix_word_vecs_dec', false, [[Fix word embeddings on the decoder side]]},
   {'-dropout', 0.3, [[Dropout probability. Dropout is applied between vertical LSTM stacks.]]},
   {'-gate', false, [[Use the gating mechanism]]},
+  {'-concat', false, [[Use the concat mechanism]]},
 
   -- gating network
   {'-gating_layers', 1,           [[Number of layers in the RNN encoder/decoder]],
@@ -86,7 +87,8 @@ function Seq2Seq:__init(args, dicts, verbose)
   onmt.utils.Table.merge(self.args, onmt.utils.ExtendedCmdLine.getModuleOpts(args, options))
 
   self.gate = args.gate
-  if self.gate then
+  self.concat = args.concat
+  if self.gate or self.concat then
     self.models.gatingNetwork = onmt.Factory.buildGatingNetwork(args, dicts.src, verbose)
     self.gatingType = args.gating_type
   end
@@ -102,7 +104,8 @@ function Seq2Seq.load(args, models, dicts, isReplica)
   parent.__init(self, args)
   onmt.utils.Table.merge(self.args, onmt.utils.ExtendedCmdLine.getModuleOpts(args, options))
   self.gate = args.gate
-  if args.gate then
+  self.concat = args.concat
+  if slef.gate or self.concat then
     self.models.gatingNetwork = onmt.Factory.loadGatingNetwork(models.gatingNetwork, isReplica)
     self.gatingType = args.gating_type
   end
@@ -124,7 +127,7 @@ function Seq2Seq.dataType()
 end
 
 function Seq2Seq:enableProfiling()
-  if self.gate then
+  if self.gate or self.concat then
     _G.profiler.addHook(self.models.gatingNetwork, 'gatingNetwork')
   end
   _G.profiler.addHook(self.models.encoder, 'encoder')
@@ -140,7 +143,7 @@ end
 function Seq2Seq:forwardComputeLoss(batch)
   local gatingEncStates = nil
   local gatingContext = nil
-  if self.gate then
+  if self.gate or self.concat then
     -- gatingContext: batch x rho x dim tensor
     if self.gatingType == 'contextBiEncoder' then
       gatingEncStates, gatingContext = self.models.gatingNetwork:forward(batch)
@@ -175,7 +178,7 @@ function Seq2Seq:trainNetwork(batch, dryRun)
   local rnnSize = nil
   local gatingEncStates = nil
   local gatingContext = nil
-  if self.gate then
+  if self.gate or self.concat then
     --[[
     print ('----------------------')
     if self.models.encoder.name == 'Encoder' then
@@ -242,7 +245,7 @@ function Seq2Seq:trainNetwork(batch, dryRun)
   local encGradStatesOut, gradContext, loss = self.models.decoder:backward(batch, decOutputs, self.criterion)
   --print(gradContext:size())
   local gradInputs = self.models.encoder:backward(batch, encGradStatesOut, gradContext)
-  if self.gate then
+  if self.gate or self.concat then
     if self.gatingType == 'contextBiEncoder' then
       --print(gradInputs[1])
       local gradGatingContext = torch.Tensor(batch.size, batch.sourceLength, rnnSize):zero()
