@@ -73,8 +73,8 @@ local options = {
   {'-gating_fix_word_vecs_dec', false, [[Fix word embeddings on the decoder side]]},
   {'-gating_dropout', 0.3, [[Dropout probability. Dropout is applied between vertical LSTM stacks.]]},
   {'-gating_type', 'contextBiEncoder', [[Gating Network]],
-                    {enum={'contextBiEncoder', 'leave_one_out', 'conv', 'cbow'}}}
-
+                    {enum={'contextBiEncoder', 'leave_one_out', 'conv', 'cbow'}}},
+  {'-share', false, [[share contextnet lookupTable with encoder]]}
 }
 
 function Seq2Seq.declareOpts(cmd)

@@ -8,7 +8,7 @@ local options = {
                      {enum={'lm','seq2seq'}}},
   {'-param_init', 0.1, [[Parameters are initialized over uniform distribution with support (-param_init, param_init)]],
                        {valid=function(v) return v >= 0 and v <= 1 end}},
-  {'-share', false, [[share contextnet lookupTable with encoder]], {enum={true, false}}}
+  --{'-share', false, [[share contextnet lookupTable with encoder]], {enum={true, false}}}
 }
 
 function Model.declareOpts(cmd)
