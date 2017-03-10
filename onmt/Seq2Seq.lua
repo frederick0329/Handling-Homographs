@@ -59,7 +59,7 @@ local options = {
                      {enum={0,1}}},
   {'-gating_residual', false, [[Add residual connections between RNN layers.]]},
   {'-gating_brnn', true, [[Use a bidirectional encoder]]},
-  {'-gating_brnn_merge', 'sum', [[Merge action for the bidirectional hidden states]],
+  {'-gating_brnn_merge', 'concat', [[Merge action for the bidirectional hidden states]],
                      {enum={'concat','sum'}}},
   {'-gating_pre_word_vecs_enc', '', [[If a valid path is specified, then this will load
                                      pretrained word embeddings on the encoder side.
