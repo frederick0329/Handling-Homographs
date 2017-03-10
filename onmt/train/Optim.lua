@@ -65,7 +65,7 @@ local options = {
                                        the norm equal to max_grad_norm]]},
   {'-learning_rate_decay', 0.5 , [[Decay learning rate by this much if (i) perplexity does not decrease
                                        on the validation set or (ii) epoch has gone past the start_decay_at_limit]]},
-  {'-start_decay_at',      9   , [[Start decay after this epoch]],
+  {'-start_decay_at',      100   , [[Start decay after this epoch]],
                                  {valid=onmt.utils.ExtendedCmdLine.isUInt()}}
 }
 
