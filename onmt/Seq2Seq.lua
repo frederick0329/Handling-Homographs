@@ -105,7 +105,7 @@ function Seq2Seq.load(args, models, dicts, isReplica)
   onmt.utils.Table.merge(self.args, onmt.utils.ExtendedCmdLine.getModuleOpts(args, options))
   self.gate = args.gate
   self.concat = args.concat
-  if slef.gate or self.concat then
+  if self.gate or self.concat then
     self.models.gatingNetwork = onmt.Factory.loadGatingNetwork(models.gatingNetwork, isReplica)
     self.gatingType = args.gating_type
   end
