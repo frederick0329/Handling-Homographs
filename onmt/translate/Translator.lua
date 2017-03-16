@@ -20,8 +20,9 @@ local options = {
                             scores will be considered. If the returned hypotheses voilate filters,
                             then set this to a larger value to consider more.]]},
   {'-gate', false, [[Using Gating Network.]]},
+  {'-concat', false, [[Using Concat Network.]]},
   {'-gating_type', 'contextBiEncoder', [[Gating Network]],
-                    {enum={'contextBiEncoder', 'leave_one_out'}}}
+                    {enum={'contextBiEncoder', 'leave_one_out', 'conv', 'cbow'}}}
 }
 
 function Translator.declareOpts(cmd)
@@ -48,7 +49,7 @@ function Translator:__init(args)
   onmt.utils.Cuda.convert(self.models.encoder)
   onmt.utils.Cuda.convert(self.models.decoder)
 
-  if self.opt.gate == true then
+  if self.opt.gate or self.opt.concat == true then
     self.models.gatingNetwork = onmt.Factory.loadGatingNetwork(self.checkpoint.models.gatingNetwork)
     self.models.gatingNetwork:evaluate()
     onmt.utils.Cuda.convert(self.models.gatingNetwork)
@@ -173,7 +174,7 @@ function Translator:translateBatch(batch)
   local rnnSize = nil
   local gatingEncStates = nil
   local gatingContext = nil
-  if self.opt.gate then
+  if self.opt.gate or self.opt.concat then
     self.models.gatingNetwork:maskPadding()
     rnnSize = self.models.gatingNetwork.args.rnnSize
     -- gatingContext: batch x rho x dim tensor
@@ -190,6 +191,15 @@ function Translator:translateBatch(batch)
       end
       gatingContext = torch.cat(gatingContext, 1):resize(batch.sourceLength, batch.size, self.models.gatingNetwork.args.rnnSize)
       gatingContext = gatingContext:transpose(1,2) -- swapping dim1 with dim2 -> batch x rho x dim
+    elseif self.opt.gating_type == 'conv' then
+        gatingContext = self.models.gatingNetwork:forward(batch)
+    elseif self.opt.gating_type == 'cbow' then
+        gatingVector = self.models.gatingNetwork:forward(batch)
+        local replica = nn.Replicate(batch.sourceLength, 2)
+        if #onmt.utils.Cuda.gpuIds > 0 then
+          replica:cuda()
+        end
+        gatingContext = replica:forward(gatingVector)
     end
     batch:setGateTensor(gatingContext)
     --batch:setGateTensor(torch.Tensor(batch.size, batch.sourceLength, self.models.gatingNetwork.args.rnnSize):fill(1):cuda())

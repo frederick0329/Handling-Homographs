@@ -1,2 +1,2 @@
-th translate.lua -model ./models/model_biencoder_gate_ende/_epoch12_7.25.t7 -src wmt_en_de/newstest2014.en -tgt wmt_en_de/newstest2014.de -output ./models/model_biencoder_gate_ende/epoch12_pred_2014.txt -batch_size 200 -replace_unk -gpuid 1 -gate -gating_type contextBiEncoder
-perl ./benchmark/3rdParty/multi-bleu.perl ./wmt_en_de/newstest2014.de < ./models/model_biencoder_gate_ende/epoch12_pred_2014.txt
+th translate.lua -model ./models/model_biencoder_concat_ende/model_epoch12_6.82.t7 -src wmt_en_de/newstest2014.en -tgt wmt_en_de/newstest2014.de -output ./models/model_biencoder_concat_ende/epoch12_pred_2014.txt -batch_size 200 -replace_unk -gpuid 1 -concat -gating_type contextBiEncoder
+perl ./benchmark/3rdParty/multi-bleu.perl ./wmt_en_de/newstest2014.de < ./models/model_biencoder_concat_ende/epoch12_pred_2014.txt
