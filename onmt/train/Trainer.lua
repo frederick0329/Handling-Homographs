@@ -34,7 +34,7 @@ local options = {
                                       {valid=onmt.utils.ExtendedCmdLine.isUInt()}},
   {'-start_iteration',         1,     [[If loading from a checkpoint, the iteration from which to start]],
                                          {valid=onmt.utils.ExtendedCmdLine.isInt(1)}},
-  {'-end_epoch',               13,    [[The final epoch of the training]],
+  {'-end_epoch',               30,    [[The final epoch of the training]],
                                       {valid=onmt.utils.ExtendedCmdLine.isInt(1)}},
   {'-start_epoch',             1,     [[If loading from a checkpoint, the epoch from which to start]],
                                       {valid=onmt.utils.ExtendedCmdLine.isInt(1)}},
@@ -256,6 +256,8 @@ function Trainer:train(model, optim, trainData, validData, dataset, info)
 
   _G.logger:info('Start training...')
 
+  local prevPpl = nil
+
   for epoch = self.args.start_epoch, self.args.end_epoch do
     _G.logger:info('')
 
@@ -270,12 +272,17 @@ function Trainer:train(model, optim, trainData, validData, dataset, info)
     local validPpl = eval(model, validData)
     globalProfiler:stop('valid')
 
+
     if self.args.profiler then _G.logger:info('profile: %s', globalProfiler:log()) end
     _G.logger:info('Validation perplexity: %.2f', validPpl)
 
     optim:updateLearningRate(validPpl, epoch)
 
     checkpoint:saveEpoch(validPpl, epochState, true)
+    if prevPpl ~= nil and math.abs(prevPpl - validPpl) <= 0.01 then
+        break
+    end
+    prevPpl = validPpl
   end
 end
 
