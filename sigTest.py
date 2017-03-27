@@ -20,7 +20,7 @@ if __name__ == '__main__':
     command_translate = 'th translate.lua -model ' + opts.model + \
                                         ' -src sigTest_tmp_input.txt' + \
                                         ' -output sigTest_tmp_pred.txt' + \
-                                        ' -gpuid ' + opts.gpuid + ' -batch_size 500 -replace_unk'
+                                        ' -gpuid ' + opts.gpuid + ' -batch_size 400 -replace_unk -disable_logs'
     if opts.concat:
         command_translate += ' -concat -gating_type ' + opts.context_type
 
@@ -31,6 +31,7 @@ if __name__ == '__main__':
 
     scores = []
     for t in xrange(int(opts.M)):
+        print t, opts.M
         shuffle(data)
         writer = open('sigTest_tmp_input.txt', 'w')
         for i in xrange(int(opts.ratio*len(data))):
