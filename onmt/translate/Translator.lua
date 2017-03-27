@@ -1,4 +1,5 @@
 local Translator = torch.class('Translator')
+local nnq = require ('nnquery')
 
 local options = {
   {'-model', '', [[Path to model .t7 file]], {valid=onmt.utils.ExtendedCmdLine.nonEmpty}},
@@ -336,6 +337,70 @@ function Translator:translate(src, gold)
   end
 
   return results
+end
+
+function Translator:extractWordEmbeddingBatch(batch)
+  local rnnSize = nil
+  local gatingEncStates = nil
+  local gatingContext = nil
+  if self.opt.gate or self.opt.concat then
+    self.models.gatingNetwork:maskPadding()
+    rnnSize = self.models.gatingNetwork.args.rnnSize
+    -- gatingContext: batch x rho x dim tensor
+    if self.opt.gating_type == 'contextBiEncoder' then
+      gatingEncStates, gatingContext = self.models.gatingNetwork:forward(batch)
+      --print(gatingContext:size())
+    elseif self.opt.gating_type == 'leave_one_out' then
+      gatingContext = {}
+      for t = 1, batch.sourceLength do
+        local gateInputBatch = onmt.utils.Tensor.deepClone(batch)
+        gateInputBatch.sourceInput[t]:fill(onmt.Constants.DOL)
+        local finalStates, context = self.models.gatingNetwork:forward(gateInputBatch)
+        table.insert(gatingContext, finalStates[#finalStates]) -- gatingContext then becomes rho x batch x dim -> need to transpose later
+      end
+      gatingContext = torch.cat(gatingContext, 1):resize(batch.sourceLength, batch.size, self.models.gatingNetwork.args.rnnSize)
+      gatingContext = gatingContext:transpose(1,2) -- swapping dim1 with dim2 -> batch x rho x dim
+    elseif self.opt.gating_type == 'conv' then
+        gatingContext = self.models.gatingNetwork:forward(batch)
+    elseif self.opt.gating_type == 'cbow' then
+        gatingVector = self.models.gatingNetwork:forward(batch)
+        local replica = nn.Replicate(batch.sourceLength, 2)
+        if #onmt.utils.Cuda.gpuIds > 0 then
+          replica:cuda()
+        end
+        gatingContext = replica:forward(gatingVector)
+    end
+    batch:setGateTensor(gatingContext)
+    --batch:setGateTensor(torch.Tensor(batch.size, batch.sourceLength, self.models.gatingNetwork.args.rnnSize):fill(1):cuda())
+    -- print(gatingContext)
+  end
+  self.models.encoder:maskPadding()
+  self.models.decoder:maskPadding()
+
+  -- local encStates, context = self.models.encoder:forward(batch)
+  local wordEmbedding = {}
+  for t = 1, batch.sourceLength do
+    -- local inputs = {}
+    -- table.insert(inputs, batch:getSourceInput(t))
+    -- print (inputs)
+    -- print (batch:getSourceInput(t))
+    if self.models.encoder.name == 'Encoder' then
+      table.insert(wordEmbedding, nnq(self.models.encoder.modules[1]):descendants()[13]:val().data.module:forward(batch:getSourceInput(t))) -- append 1 x 500 to wordEmbedding
+    else
+      table.insert(wordEmbedding, nnq(self.models.encoder.modules[1].modules[1]):descendants()[13]:val().data.module:forward(batch:getSourceInput(t)))
+    end
+  end
+  wordEmbedding = torch.cat(wordEmbedding, 1) -- table -> tensor
+  return wordEmbedding:double()
+end
+
+function Translator:extractWordEmbedding(src)
+  local data, ignored, indexMap = self:buildData(src, nil)
+  local results = {}
+  local batch = data:getBatch()
+  assert(batch.size == 1)
+  local embedding = self:extractWordEmbeddingBatch(batch)
+  return embedding
 end
 
 return Translator

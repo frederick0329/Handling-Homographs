@@ -6,7 +6,8 @@ local options = {
   {'-src', '', [[Source sequence to decode (one line per sequence)]],
                {valid=onmt.utils.ExtendedCmdLine.nonEmpty}},
   {'-tgt', '', [[True target sequence (optional)]]},
-  {'-output', 'pred.txt', [[Path to output the predictions (each line will be the decoded sequence)]]}
+  {'-output', 'pred.txt', [[Path to output the predictions (each line will be the decoded sequence)]]},
+  {'-extract_embedding', false, [[whether to extract word embedding]]}
 }
 
 cmd:setCmdLineOptions(options, 'Data')
@@ -65,6 +66,7 @@ local function main()
     timer:reset()
   end
 
+  local wordEmbeddings = {}
   while true do
     local srcTokens = srcReader:next()
     local goldTokens
@@ -86,52 +88,56 @@ local function main()
       if opt.time then
         timer:resume()
       end
+      if not opt.extract_embedding then    
+        local results = translator:translate(srcBatch, goldBatch)
 
-      local results = translator:translate(srcBatch, goldBatch)
-
-      if opt.time then
-        timer:stop()
-      end
-
-      for b = 1, #results do
-        if (#srcBatch[b].words == 0) then
-          _G.logger:warning('Line ' .. sentId .. ' is empty.')
-          outFile:write('\n')
-        else
-          _G.logger:info('SENT %d: %s', sentId, translator:buildOutput(srcBatch[b]))
-
-          if withGoldScore then
-            _G.logger:info('GOLD %d: %s', sentId, translator:buildOutput(goldBatch[b]), results[b].goldScore)
-            _G.logger:info("GOLD SCORE: %.2f", results[b].goldScore)
-            goldScoreTotal = goldScoreTotal + results[b].goldScore
-            goldWordsTotal = goldWordsTotal + #goldBatch[b].words
-          end
-
-          for n = 1, #results[b].preds do
-            local sentence = translator:buildOutput(results[b].preds[n])
-
-            if n == 1 then
-              outFile:write(sentence .. '\n')
-              predScoreTotal = predScoreTotal + results[b].preds[n].score
-              predWordsTotal = predWordsTotal + #results[b].preds[n].words
-
-              if #results[b].preds > 1 then
-                _G.logger:info('')
-                _G.logger:info('BEST HYP:')
-              end
-            end
-
-            if #results[b].preds > 1 then
-              _G.logger:info("[%.2f] %s", results[b].preds[n].score, sentence)
-            else
-              _G.logger:info("PRED %d: %s", sentId, sentence)
-              _G.logger:info("PRED SCORE: %.2f", results[b].preds[n].score)
-            end
-          end
+        if opt.time then
+          timer:stop()
         end
 
-        _G.logger:info('')
-        sentId = sentId + 1
+        for b = 1, #results do
+          if (#srcBatch[b].words == 0) then
+            _G.logger:warning('Line ' .. sentId .. ' is empty.')
+            outFile:write('\n')
+          else
+            _G.logger:info('SENT %d: %s', sentId, translator:buildOutput(srcBatch[b]))
+
+            if withGoldScore then
+              _G.logger:info('GOLD %d: %s', sentId, translator:buildOutput(goldBatch[b]), results[b].goldScore)
+              _G.logger:info("GOLD SCORE: %.2f", results[b].goldScore)
+              goldScoreTotal = goldScoreTotal + results[b].goldScore
+              goldWordsTotal = goldWordsTotal + #goldBatch[b].words
+            end
+
+            for n = 1, #results[b].preds do
+              local sentence = translator:buildOutput(results[b].preds[n])
+
+              if n == 1 then
+                outFile:write(sentence .. '\n')
+                predScoreTotal = predScoreTotal + results[b].preds[n].score
+                predWordsTotal = predWordsTotal + #results[b].preds[n].words
+
+                if #results[b].preds > 1 then
+                  _G.logger:info('')
+                  _G.logger:info('BEST HYP:')
+                end
+              end
+
+              if #results[b].preds > 1 then
+                _G.logger:info("[%.2f] %s", results[b].preds[n].score, sentence)
+              else
+                _G.logger:info("PRED %d: %s", sentId, sentence)
+                _G.logger:info("PRED SCORE: %.2f", results[b].preds[n].score)
+              end
+            end
+          end
+
+          _G.logger:info('')
+          sentId = sentId + 1
+        end
+      else
+        local wordEmbedding = translator:extractWordEmbedding(srcBatch)
+        table.insert(wordEmbeddings, wordEmbedding)
       end
 
       if srcTokens == nil then
@@ -146,7 +152,9 @@ local function main()
       collectgarbage()
     end
   end
-
+  if opt.extract_embedding then
+    torch.save(opt.output, wordEmbeddings)
+  end
   if opt.time then
     local time = timer:time()
     local sentenceCount = sentId-1
