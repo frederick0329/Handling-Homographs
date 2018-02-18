@@ -376,18 +376,21 @@ function Translator:extractWordEmbeddingBatch(batch)
   end
   self.models.encoder:maskPadding()
   self.models.decoder:maskPadding()
-
+  -- print (nnq(self.models.encoder.modules[1]):descendants()[13])
   -- local encStates, context = self.models.encoder:forward(batch)
+  -- print (nnq(self.models.encoder.modules[1].modules[1]):descendants()[13])
+  -- local a = torch.Tensor(1):cuda()
+  -- a[1] = 11
+  -- print (nnq(self.models.encoder.modules[1].modules[1]):descendants()[13]:val().data.module:forward(a))
   local wordEmbedding = {}
   for t = 1, batch.sourceLength do
     -- local inputs = {}
     -- table.insert(inputs, batch:getSourceInput(t))
     -- print (inputs)
-    -- print (batch:getSourceInput(t))
     if self.models.encoder.name == 'Encoder' then
-      table.insert(wordEmbedding, nnq(self.models.encoder.modules[1]):descendants()[13]:val().data.module:forward(batch:getSourceInput(t))) -- append 1 x 500 to wordEmbedding
+      table.insert(wordEmbedding, nnq(self.models.encoder.modules[1]):descendants()[13]:val().data.module:forward(batch:getSourceInput(t)):clone()) -- append 1 x 500 to wordEmbedding
     else
-      table.insert(wordEmbedding, nnq(self.models.encoder.modules[1].modules[1]):descendants()[13]:val().data.module:forward(batch:getSourceInput(t)))
+      table.insert(wordEmbedding, nnq(self.models.encoder.modules[1].modules[1]):descendants()[13]:val().data.module:forward(batch:getSourceInput(t)):clone())
     end
   end
   wordEmbedding = torch.cat(wordEmbedding, 1) -- table -> tensor

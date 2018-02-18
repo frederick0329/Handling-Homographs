@@ -85,7 +85,7 @@ local function buildGatedInputNetwork(opt, dicts, wordSizes, pretrainedWords, fi
     end 
     local gateNetwork = nn.Sequential()
         :add(nn.Linear(context_size, inputSize))
-        :add(nn.SoftMax())
+        :add(nn.Sigmoid())
 
     gate = nn.ParallelTable()
       :add(wordNetwork)
@@ -95,7 +95,7 @@ local function buildGatedInputNetwork(opt, dicts, wordSizes, pretrainedWords, fi
         :add(gate)
         --:add(onmt.PrintIdentity())
         :add(nn.CMulTable())
-	:add(nn.MulConstant(inputSize))
+	--:add(nn.MulConstant(inputSize))
         --:add(onmt.PrintIdentity())
   elseif opt.concat == true then
     print("building concat network...")
