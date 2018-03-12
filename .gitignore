@@ -1,3 +1,9 @@
 *.t7
 *.dict
+*.txt
+*.de
+*.en
+*.fr
+*.zh
 doc/tree
+unused/
