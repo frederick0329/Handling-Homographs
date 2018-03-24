@@ -1,5 +1,7 @@
 # Handling Homographs in Neural Machine Translation 
-Thie repo contains implementation of our paper 
+This repo is currenlty work in progress.
+
+This repo contains implementation of our paper 
 
 [Handling Homographs in Neural Machine Translation](https://arxiv.org/abs/1708.06510)
 
