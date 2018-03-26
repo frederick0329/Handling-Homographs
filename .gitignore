@@ -1,8 +1,8 @@
 *.t7
 *.dict
 *.txt
-*.de
 *.en
+*.de
 *.fr
 *.zh
 doc/tree

@@ -8,7 +8,6 @@ local options = {
                      {enum={'lm','seq2seq'}}},
   {'-param_init', 0.1, [[Parameters are initialized over uniform distribution with support (-param_init, param_init)]],
                        {valid=function(v) return v >= 0 and v <= 1 end}},
-  --{'-share', false, [[share contextnet lookupTable with encoder]], {enum={true, false}}}
 }
 
 function Model.declareOpts(cmd)
@@ -63,8 +62,6 @@ function Model:initParams(verbose)
 
     if key == 'gatingNetwork' and self.args.share then
       if mod.name == 'BiEncoder' then --contextBiEncoder
-        -- dirty code... 
-        -- p, gp = mod.fwd.network:getParameters()
         local fwd = mod.modules[1].modules[1]
         p, gp = nnq(fwd):descendants()[3]:val().data.module:getParameters()
 
@@ -83,12 +80,9 @@ function Model:initParams(verbose)
         table.insert(gradParams, gp)
         local bwd = mod.modules[2].modules[1]
         p, gp = nnq(bwd):descendants()[3]:val().data.module:getParameters()
-        -- p, gp = mod.bwd.rnn:getParameters()
       elseif mod.name == 'Encoder' then -- leave_one_out
-        -- p, gp = mod.rnn:getParameters()
-        p, gp = nnq(mod.modules[1]):descendants()[3]:val().data.module:getParameters() -- this line needs to check later
+        p, gp = nnq(mod.modules[1]):descendants()[3]:val().data.module:getParameters()
       elseif mod.name == 'ContextConvolution' then
-        -- print (nnq(mod.modules[1]):descendants()[4]:val().data.module)
         p, gp = nnq(mod.modules[1]):descendants()[4]:val().data.module:getParameters()
       end
     end
@@ -113,8 +107,6 @@ function Model:initParams(verbose)
   end
   -- manually share the lookupTable
   if self.models.gatingNetwork and self.args.share then
-    -- local p, gp = self.models['encoder'].inputNet.modules[1].modules[1]:parameters()
-    
     local p, gp
     if self.models['encoder'].name == 'Encoder' then
       p, gp = nnq(self.models['encoder'].modules[1]):descendants()[13]:val().data.module.modules[1].modules[1]:parameters()
@@ -123,14 +115,12 @@ function Model:initParams(verbose)
     end
     local cloneP, cloneGP
     if self.models.gatingNetwork.name == 'BiEncoder' then
-      -- cloneP, cloneGP = self.models['gatingNetwork'].fwd.inputNet:parameters()
       local fwd = self.models['gatingNetwork'].modules[1].modules[1]
       cloneP, cloneGP = nnq(fwd):descendants()[9]:val().data.module:parameters()
       for i = 1, #p do
         cloneP[i]:set(p[i])
         cloneGP[i]:set(gp[i])
       end
-      -- cloneP, cloneGP = self.models['gatingNetwork'].bwd.inputNet:parameters()
       local bwd = self.models['gatingNetwork'].modules[2].modules[1]
       cloneP, cloneGP = nnq(bwd):descendants()[9]:val().data.module:parameters()
       for i = 1, #p do
@@ -138,14 +128,12 @@ function Model:initParams(verbose)
         cloneGP[i]:set(gp[i])
       end
     elseif self.models.gatingNetwork.name == 'Encoder' then
-      -- cloneP, cloneGP = self.models['gatingNetwork'].inputNet:parameters()
-      cloneP, cloneGP = nnq(self.models['gatingNetwork'].modules[1]):descendants()[9]:val().data.module:parameters() -- this line needs to check later
+      cloneP, cloneGP = nnq(self.models['gatingNetwork'].modules[1]):descendants()[9]:val().data.module:parameters()
       for i = 1, #p do
         cloneP[i]:set(p[i])
         cloneGP[i]:set(gp[i])
       end
     elseif self.models.gatingNetwork.name == 'ContextConvolution' or self.models.gatingNetwork.name == 'ContextCBow' then
-        -- print (nnq(self.models['gatingNetwork'].modules[1]):descendants())
         cloneP, cloneGP = nnq(self.models['gatingNetwork'].modules[1]):descendants()[2]:val().data.module:parameters()
         for i = 1, #p do
           cloneP[i]:set(p[i])

@@ -186,30 +186,6 @@ function Seq2Seq:trainNetwork(batch, dryRun)
   local gatingEncStates = nil
   local gatingContext = nil
   if self.gate or self.concat then
-    --[[
-    print ('----------------------')
-    if self.models.encoder.name == 'Encoder' then
-      print (torch.sum(self.models.encoder.inputNet.modules[1].modules[1].net.weight))
-    elseif self.models.encoder.name == 'BiEncoder' then
-      print (torch.sum(self.models.encoder.fwd.inputNet.modules[1].modules[1].net.weight))
-    end
-    if self.models.gatingNetwork.name == 'BiEncoder' then
-      print (torch.sum(self.models.gatingNetwork.fwd.inputNet.net.weight))
-      -- print (torch.sum(self.models.gatingNetwork.bwd.inputNet.net.weight))
-      local tmpF, tmpGPF = self.models.gatingNetwork.fwd:parameters()
-      local tmpB, tmpGPB = self.models.gatingNetwork.bwd:parameters()
-      print (torch.sum(tmpF[1]))
-      print (torch.sum(tmpB[1]))
-    elseif self.models.gatingNetwork.name == 'Encoder' then
-      print (torch.sum(self.models.gatingNetwork.inputNet.net.weight))
-      local tmpP, tmpGP = self.models.gatingNetwork:parameters()
-      print (torch.sum(tmpP[1]))
-    elseif self.models.gatingNetwork.name == 'ContextConvolution' or self.models.gatingNetwork.name == 'ContextCBow' then
-      print (torch.sum(self.models.gatingNetwork.inputNet.net.weight))
-      local tmpP, tmpGP = self.models.gatingNetwork:parameters()
-      print (torch.sum(tmpP[1]))
-    end
-    --]]
     rnnSize = self.models.gatingNetwork.args.rnnSize
     -- gatingContext: batch x rho x dim tensor
     if self.gatingType == 'contextBiEncoder' then
@@ -244,17 +220,14 @@ function Seq2Seq:trainNetwork(batch, dryRun)
 
   local encStates, context = self.models.encoder:forward(batch)
   local decOutputs = self.models.decoder:forward(batch, encStates, context)
-  --print(context:size())
   if dryRun then
     decOutputs = onmt.utils.Tensor.recursiveClone(decOutputs)
   end
 
   local encGradStatesOut, gradContext, loss = self.models.decoder:backward(batch, decOutputs, self.criterion)
-  --print(gradContext:size())
   local gradInputs = self.models.encoder:backward(batch, encGradStatesOut, gradContext)
   if self.gate or self.concat then
     if self.gatingType == 'contextBiEncoder' then
-      --print(gradInputs[1])
       local gradGatingContext = torch.Tensor(batch.size, batch.sourceLength, rnnSize):zero()
       if #onmt.utils.Cuda.gpuIds > 0 then
         gradGatingContext = gradGatingContext:cuda()
