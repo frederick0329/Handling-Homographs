@@ -31,7 +31,7 @@ OpenNMT consists of three commands:
 
 1) Preprocess the data.
 
-```th preprocess.lua -train_src data/src-train.txt -train_tgt data/tgt-train.txt -valid_src data/src-val.txt -valid_tgt data/tgt-val.txt -save_data data/demo```
+```th preprocess.lua -train_src wmt_en_de/train.en -train_tgt data/train.de -valid_src data/newstest2013.en -valid_tgt data/newstest2013.de -save_data wmt_en_de/preprocessed```
 
 2) Train the model.
 
