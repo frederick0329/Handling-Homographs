@@ -1,5 +1,4 @@
 # Handling Homographs in Neural Machine Translation 
-This repo is currenlty work in progress.
 
 This repo contains implementation of our paper 
 
