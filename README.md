@@ -35,8 +35,30 @@ OpenNMT consists of three commands:
 
 2) Train the model.
 
-```th train.lua -data data/demo-train.t7 -save_model model```
+The command for the following setting
+- -gate : use the gating mechanism to integrate context vector and word embedding
+- -gating_type cbow : use nbow(cbow) as context network type
+- -share : force the input embedding for the context network to share the parameters with the input for the main rnn
+- -brnn : use bi-rnn as the main rnn
+
+```th train.lua -data wmt_en_de/preprocessed_ende-train.t7 -save_model model -gate -gating_type cbow -share -brnn -gpuid 1```
+
+The command for the following setting
+- -concat : use the concat mechanism to integrate context vector and word embedding
+- -gating_type contextBiEncoder : use a bi-encoder as context network type
+- -share : force the input embedding for the context network to share the parameters with the input for the main rnn
+- -brnn : use bi-rnn as the main rnn
+
+```th train.lua -data wmt_en_de/preprocessed_ende-train.t7 -save_model model -concat -gating_type contextBiEncoder -share -brnn -gpuid 1```
 
 3) Translate sentences.
 
-```th translate.lua -model model_final.t7 -src data/src-test.txt -output pred.txt```
+The command for the following setting
+- -gate : use the gating mechanism to integrate context vector and word embedding
+- -gating_type cbow : use nbow(cbow) as context network type
+
+```th translate.lua -gate -gating_type cbow -model model_final.t7 -src wmt_en_de/newstest2014.en -tgt wmt_en_de/newstest2014.de -output pred.txt -replace_unk -gpuid 1```
+
+4) Note
+
+The input options must match for the contextNetwork during the training process and the translating process.
