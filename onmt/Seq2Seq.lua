@@ -36,10 +36,20 @@ local options = {
   {'-fix_word_vecs_enc', false, [[Fix word embeddings on the encoder side]]},
   {'-fix_word_vecs_dec', false, [[Fix word embeddings on the decoder side]]},
   {'-dropout', 0.3, [[Dropout probability. Dropout is applied between vertical LSTM stacks.]]},
-  {'-gate', false, [[Use the gating mechanism]]},
-  {'-concat', false, [[Use the concat mechanism]]},
+ 
+  -- the following options are used for adding context to input word embedding
+  
+  {'-gate', false, [[Use the gating mechanism for adding context vector]]},
+  {'-concat', false, [[Use the concat mechanism for adding context vector]]},
+  
+  -- type of contextNetwork that is used to generate the context vector
+  
+  {'-gating_type', 'contextBiEncoder', [[ContextNetwork to generate the context vector]],
+                    {enum={'contextBiEncoder', 'leave_one_out', 'conv', 'cbow'}}},
+  {'-share', false, [[share contextnet lookupTable with encoder]]},
 
-  -- gating network
+  -- options for contextNetwork = biencoder
+  
   {'-gating_layers', 1,           [[Number of layers in the RNN encoder/decoder]],
                      {valid=onmt.utils.ExtendedCmdLine.isUInt()}},
   {'-gating_rnn_size', 500, [[Size of RNN hidden states]],
@@ -72,10 +82,7 @@ local options = {
                          {valid=onmt.utils.ExtendedCmdLine.fileNullOrExists}},
   {'-gating_fix_word_vecs_enc', false, [[Fix word embeddings on the encoder side]]},
   {'-gating_fix_word_vecs_dec', false, [[Fix word embeddings on the decoder side]]},
-  {'-gating_dropout', 0.3, [[Dropout probability. Dropout is applied between vertical LSTM stacks.]]},
-  {'-gating_type', 'contextBiEncoder', [[Gating Network]],
-                    {enum={'contextBiEncoder', 'leave_one_out', 'conv', 'cbow'}}},
-  {'-share', false, [[share contextnet lookupTable with encoder]]}
+  {'-gating_dropout', 0.3, [[Dropout probability. Dropout is applied between vertical LSTM stacks.]]}
 }
 
 function Seq2Seq.declareOpts(cmd)

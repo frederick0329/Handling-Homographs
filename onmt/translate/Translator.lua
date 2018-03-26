@@ -349,7 +349,6 @@ function Translator:extractWordEmbeddingBatch(batch)
     -- gatingContext: batch x rho x dim tensor
     if self.opt.gating_type == 'contextBiEncoder' then
       gatingEncStates, gatingContext = self.models.gatingNetwork:forward(batch)
-      --print(gatingContext:size())
     elseif self.opt.gating_type == 'leave_one_out' then
       gatingContext = {}
       for t = 1, batch.sourceLength do
@@ -371,22 +370,11 @@ function Translator:extractWordEmbeddingBatch(batch)
         gatingContext = replica:forward(gatingVector)
     end
     batch:setGateTensor(gatingContext)
-    --batch:setGateTensor(torch.Tensor(batch.size, batch.sourceLength, self.models.gatingNetwork.args.rnnSize):fill(1):cuda())
-    -- print(gatingContext)
   end
   self.models.encoder:maskPadding()
   self.models.decoder:maskPadding()
-  -- print (nnq(self.models.encoder.modules[1]):descendants()[13])
-  -- local encStates, context = self.models.encoder:forward(batch)
-  -- print (nnq(self.models.encoder.modules[1].modules[1]):descendants()[13])
-  -- local a = torch.Tensor(1):cuda()
-  -- a[1] = 11
-  -- print (nnq(self.models.encoder.modules[1].modules[1]):descendants()[13]:val().data.module:forward(a))
   local wordEmbedding = {}
   for t = 1, batch.sourceLength do
-    -- local inputs = {}
-    -- table.insert(inputs, batch:getSourceInput(t))
-    -- print (inputs)
     if self.models.encoder.name == 'Encoder' then
       table.insert(wordEmbedding, nnq(self.models.encoder.modules[1]):descendants()[13]:val().data.module:forward(batch:getSourceInput(t)):clone()) -- append 1 x 500 to wordEmbedding
     else
